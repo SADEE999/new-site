@@ -1,48 +1,122 @@
-(() => {
-  const cfg=window.STORE_CONFIG||{},$=s=>document.querySelector(s);
-  const grid=$('#product-grid'),modal=$('#product-modal'),form=$('#order-form');
-  $('#ezcash-number').textContent=cfg.EZCASH_NUMBER||'Store owner must configure the official eZ Cash number';
-  let client=null,products=[],selected=null,category='All',validatedPromo='',validatedDiscount=0,wishlist=new Set(JSON.parse(localStorage.getItem('sadee_wishlist')||'[]')),lang=localStorage.getItem('sadee_lang')||'en';
-  $('#year').textContent=new Date().getFullYear();
-  const money=n=>`${cfg.CURRENCY||'LKR'} ${Number(n||0).toLocaleString('en-LK')}`;
-  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const ready=cfg.SUPABASE_URL&&cfg.SUPABASE_ANON_KEY&&!cfg.SUPABASE_URL.includes('YOUR_PROJECT')&&!cfg.SUPABASE_ANON_KEY.includes('YOUR_');
-  if(ready&&window.supabase)client=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
-  const fallbackPlans=[{name:'Lifetime',duration:'Lifetime access',price:4500},{name:'1 Month',duration:'30 days',price:2200},{name:'7 Days',duration:'7 days',price:1000},{name:'1 Day Trial',duration:'24 hours',price:300},{name:'3 Days',duration:'3 days',price:600},{name:'15 Days',duration:'15 days',price:1500},{name:'3 Months',duration:'90 days',price:3500},{name:'6 Months',duration:'180 days',price:4000}];
-  function parsePlans(p){try{const a=Array.isArray(p.plans)?p.plans:JSON.parse(p.plans||'[]');return a.length?a.filter(x=>x.name&&Number(x.price)>=0):fallbackPlans;}catch{return fallbackPlans;}}
-  function render(){
-    const q=($('#search').value||'').trim().toLowerCase();
-    const list=products.filter(p=>(category==='All'||p.category===category)&&`${p.name} ${p.description||''} ${p.category||''}`.toLowerCase().includes(q));
-    grid.innerHTML=list.length?list.map(p=>`<article class="product-card ${p.featured?'featured-card':''}"><button class="product-heart ${wishlist.has(p.id)?'saved':''}" data-wish="${esc(p.id)}" aria-label="Toggle wishlist">${wishlist.has(p.id)?'♥':'♡'}</button><button class="product-open" data-detail="${esc(p.id)}" aria-label="View ${esc(p.name)} details"><div class="product-image">${p.image_url?`<img src="${esc(p.image_url)}" alt="${esc(p.name)}" loading="lazy" onerror="this.remove()">`:`<span class="product-placeholder">SP<span style="font-size:15px">+</span></span>`}<span class="product-tag">${esc(p.category||'Digital')}</span>${p.featured?'<span class="featured-tag">FEATURED</span>':''}</div><div class="product-info"><span class="product-category">${esc(p.category||'Digital product')}</span><h3>${esc(p.name)}</h3><p class="product-description">${esc(p.description||'A digital product from SADEE PRO STORE.')}</p><div class="product-bottom"><span class="stock-pill ${Number(p.stock||0)<=3?'low':''}">${Number(p.stock||0)>0?`${Number(p.stock)} available`:'Contact for availability'}</span><span class="price">From ${money(Math.min(...parsePlans(p).map(x=>Number(x.price)||0)))}</span><span class="order-btn">View details ↗</span></div></div></button></article>`).join(''):`<div class="empty-state">${ready?'No products found. Check back soon.':'Connect Supabase to publish products. See README.md for setup.'}</div>`;
-    grid.querySelectorAll('[data-detail]').forEach(b=>b.addEventListener('click',()=>openProduct(b.dataset.detail)));grid.querySelectorAll('[data-wish]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();toggleWish(b.dataset.wish)}));renderWishlist();
-  }
-  async function loadAnnouncements(){const host=$('#announcement-list');if(!host||!client){if(host)host.innerHTML='<div class="empty-state">Store updates will appear here.</div>';return;}const {data,error}=await client.from('store_announcements').select('title,body,kind,created_at').eq('published',true).order('created_at',{ascending:false}).limit(6);if(error||!data?.length){host.innerHTML='<div class="empty-state">No announcements right now.</div>';return;}host.innerHTML=data.map(a=>`<article class="announcement-card"><small>${esc(a.kind||'update')}</small><h3>${esc(a.title)}</h3><p>${esc(a.body)}</p></article>`).join('');}
-  function toggleWish(id){if(wishlist.has(id))wishlist.delete(id);else wishlist.add(id);localStorage.setItem('sadee_wishlist',JSON.stringify([...wishlist]));render();}
-  function renderWishlist(){const host=$('#wishlist-grid');if(!host)return;const list=products.filter(p=>wishlist.has(p.id));host.innerHTML=list.length?list.map(p=>`<article class="product-card"><button class="product-open" data-detail="${esc(p.id)}"><div class="product-image">${p.image_url?`<img src="${esc(p.image_url)}" alt="${esc(p.name)}" loading="lazy">`:'<span class="product-placeholder">SP+</span>'}</div><div class="product-info"><h3>${esc(p.name)}</h3><div class="product-bottom"><span class="price">From ${money(Math.min(...parsePlans(p).map(x=>Number(x.price)||0)))}</span><span class="order-btn">View ↗</span></div></div></button><button class="btn btn-outline full" data-remove-wish="${esc(p.id)}">Remove from wishlist</button></article>`).join(''):'<div class="empty-state">No saved products yet. Tap ♡ on a product to add it.</div>';host.querySelectorAll('[data-detail]').forEach(b=>b.addEventListener('click',()=>openProduct(b.dataset.detail)));host.querySelectorAll('[data-remove-wish]').forEach(b=>b.addEventListener('click',()=>toggleWish(b.dataset.removeWish)));}
-  $('#language-toggle')?.addEventListener('click',()=>{lang=lang==='en'?'si':'en';localStorage.setItem('sadee_lang',lang);$('#language-toggle').textContent=lang==='en'?'සිං / EN':'EN / සිං';document.documentElement.lang=lang;document.querySelector('.hero h1').innerHTML=lang==='si'?'ඔබේ මට්ටම.<br><span>ඊළඟට ගෙනයන්න.</span>':'ENTER THE NEXT LEVEL.<br><span>UNLOCK YOUR EDGE.</span>';document.querySelector('.hero-sub').textContent=lang==='si'?'ඔබගේ ඊළඟ මට්ටමට ගැළපෙන gaming products සහ digital tools තෝරන්න.':'Premium gaming tools, digital upgrades and creator essentials. Choose your edge, place your order, and track every unlock in one place.';});
-  async function load(){loadAnnouncements();if(!client){products=[];render();return;}const {data,error}=await client.from('products').select('*').eq('active',true).order('created_at',{ascending:false});if(error){grid.innerHTML='<div class="empty-state">Could not load products. Check the Supabase setup and SQL policies.</div>';return;}products=data||[];render();await loadHero();}
-  async function loadHero(){if(!client)return;const {data}=await client.from('site_settings').select('key,value').in('key',['hero_video_url','hero_image_url','accent_color']);const settings=Object.fromEntries((data||[]).map(x=>[x.key,x.value]));if(settings.logo_image_url){document.querySelectorAll('.brand-mark').forEach(el=>{el.innerHTML=`<img src="${esc(settings.logo_image_url)}" alt="SADEE logo" style="width:100%;height:100%;object-fit:contain">`;});}if(settings.hero_image_url){const img=$('.hero-photo');if(img)img.src=settings.hero_image_url;}if(settings.accent_color&&/^#[0-9a-f]{6}$/i.test(settings.accent_color))document.documentElement.style.setProperty('--red',settings.accent_color);if(settings.hero_video_url){const v=$('#hero-video');v.src=settings.hero_video_url;v.hidden=false;v.play().catch(()=>{});$('#hero-chip').hidden=true;}}
-  function openProduct(id){selected=products.find(p=>p.id===id);if(!selected)return;const plans=parsePlans(selected);$('#detail-image').innerHTML=selected.image_url?`<img src="${esc(selected.image_url)}" alt="${esc(selected.name)}">`:'<div class="detail-placeholder">SADEE PRO STORE</div>';$('#detail-category').textContent=(selected.category||'DIGITAL PRODUCT').toUpperCase();$('#detail-title').textContent=selected.name;$('#detail-description').textContent=selected.description||'Contact us for more information about this product.';$('#detail-meta').innerHTML=[selected.version?`<span>Version: ${esc(selected.version)}</span>`:'',selected.compatibility?`<span>Compatibility: ${esc(selected.compatibility)}</span>`:'',selected.updated_date?`<span>Updated: ${esc(selected.updated_date)}</span>`:''].filter(Boolean).join('');let features=[];try{features=Array.isArray(selected.features)?selected.features:JSON.parse(selected.features||'[]')}catch{};$('#detail-features').innerHTML=features.length?`<h3>Features</h3><ul>${features.map(f=>`<li>${esc(f)}</li>`).join('')}</ul>`:'';loadReviews(selected.id);$('#detail-download').innerHTML=selected.download_url&&/^https:\/\//i.test(selected.download_url)?`<a class="btn btn-outline full" href="${esc(selected.download_url)}" target="_blank" rel="noopener noreferrer">Open download ↗</a><p class="fine-print">Only download files shared by the store owner. Paid files should use protected delivery, not a public link.</p>`:'';$('#plan-select').innerHTML=plans.map((x,i)=>`<option value="${i}">${esc(x.name)} — ${money(x.price)}${x.duration?` (${esc(x.duration)})`:''}</option>`).join('');$('#plan-select').onchange=updatePlan;updatePlan();$('#order-message').textContent='';$('#order-message').className='form-message';form.reset();$('#plan-select').value='0';updatePlan();modal.hidden=false;document.body.style.overflow='hidden';}
-  async function loadReviews(productId){const host=$('#detail-reviews');if(!host)return;host.innerHTML='<h3>Reviews & ratings</h3><p class="fine-print">Loading approved reviews…</p>';let rows=[];if(client){const {data,error}=await client.from('product_reviews').select('customer_name,rating,review_text,created_at').eq('product_id',productId).eq('approved',true).order('created_at',{ascending:false}).limit(20);if(!error)rows=data||[];}host.innerHTML=`<h3>Reviews & ratings</h3>${rows.length?rows.map(r=>`<article class="review-card"><b>${esc(r.customer_name)}</b><span>${'★'.repeat(Number(r.rating))}${'☆'.repeat(5-Number(r.rating))}</span><p>${esc(r.review_text||'')}</p></article>`).join(''):'<p class="fine-print">No approved reviews yet.</p>'}<form id="review-form" class="review-form"><label>Your name<input name="customer_name" required maxlength="60"></label><label>Rating<select name="rating"><option value="5">5 stars</option><option value="4">4 stars</option><option value="3">3 stars</option><option value="2">2 stars</option><option value="1">1 star</option></select></label><label>Your review<textarea name="review_text" rows="2" maxlength="500" placeholder="Share your experience"></textarea></label><button class="btn btn-outline" type="submit">Submit review</button><p class="form-message" id="review-message"></p></form>`;$('#review-form').addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(e.currentTarget),m=$('#review-message');try{const r=await fetch('/.netlify/functions/submit-review',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({product_id:productId,customer_name:fd.get('customer_name'),rating:Number(fd.get('rating')),review_text:fd.get('review_text')})});const d=await r.json();if(!r.ok)throw new Error(d.error||'Could not submit review.');m.textContent=d.message;m.className='form-message success';e.currentTarget.reset();}catch(err){m.textContent=err.message;m.className='form-message';}});}
-  function updatePlan(){if(!selected)return;const plan=parsePlans(selected)[Number($('#plan-select').value)||0],discount=validatedPromo===String(form.elements.promo_code?.value||'').trim().toUpperCase()?validatedDiscount:0,amount=Math.max(0,Math.round((Number(plan.price)-Number(plan.price)*discount/100)*100)/100);$('#selected-product').innerHTML=`<b>${esc(selected.name)} · ${esc(plan.name)}</b><span>${discount?`<s>${money(plan.price)}</s> `:''}${money(amount)}</span>`;}
-  function close(){modal.hidden=true;document.body.style.overflow='';}
-  $('#close-modal').addEventListener('click',close);modal.addEventListener('click',e=>{if(e.target===modal)close()});document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});$('#search').addEventListener('input',render);
-  $('#filters').querySelectorAll('[data-category]').forEach(b=>b.addEventListener('click',()=>{category=b.dataset.category;$('#filters').querySelectorAll('.filter').forEach(x=>x.classList.toggle('active',x===b));render()}));
-  async function readFunctionJson(response,functionName){
-    const contentType=String(response.headers.get('content-type')||'').toLowerCase();
-    const raw=await response.text();
-    let data;
-    try{data=JSON.parse(raw);}catch{
-      if(raw.trimStart().startsWith('<!DOCTYPE')||raw.trimStart().startsWith('<html')||contentType.includes('text/html')){
-        throw new Error(`${functionName} endpoint returned an HTML page instead of JSON. The Netlify Function is likely not deployed or the site is using the wrong publish/deploy setup. Deploy the project through the GitHub-connected Netlify site and confirm netlify/functions/validate-promo.mjs is included.`);
-      }
-      throw new Error(`${functionName} returned an invalid response (HTTP ${response.status}). Check Netlify Function logs.`);
+
+async function loadReviews(productId) {
+    const host = $('#detail-reviews');
+    if (!host) return;
+
+    host.innerHTML =
+        '<h3>Reviews & ratings</h3><p class="fine-print">Loading approved reviews…</p>';
+
+    let rows = [];
+
+    if (client) {
+        const { data, error } = await client
+            .from('product_reviews')
+            .select('customer_name,rating,review_text,created_at')
+            .eq('product_id', productId)
+            .eq('approved', true)
+            .order('created_at', { ascending: false })
+            .limit(20);
+
+        if (!error) rows = data || [];
     }
-    if(!response.ok)throw new Error(data.error||`${functionName} failed (HTTP ${response.status}).`);
-    return data;
-  }
-  $('#validate-promo')?.addEventListener('click',async()=>{const code=String(form.elements.promo_code?.value||'').trim().toUpperCase(),msg=$('#promo-preview-message');if(!code){validatedPromo='';validatedDiscount=0;msg.textContent='Enter a code first.';updatePlan();return;}msg.textContent='Checking code…';msg.className='fine-print';try{const r=await fetch('/.netlify/functions/validate-promo',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code})});const d=await readFunctionJson(r,'Promo validation');validatedPromo=d.code;validatedDiscount=d.discount_percent;msg.textContent=`${d.code} applied: ${d.discount_percent}% off. Pay the discounted amount shown above.`;msg.className='fine-print success';updatePlan();}catch(err){validatedPromo='';validatedDiscount=0;msg.textContent=err.message||'Promo validation failed.';msg.className='fine-print';updatePlan();}});
-  form.elements.promo_code?.addEventListener('input',()=>{validatedPromo='';validatedDiscount=0;$('#promo-preview-message').textContent='Validate the code before paying.';updatePlan();});
-  form.addEventListener('submit',async e=>{e.preventDefault();if(!selected)return;const planIndex=Number($('#plan-select').value)||0,plan=parsePlans(selected)[planIndex],fd=new FormData(form),name=String(fd.get('customer_name')||'').trim(),email=String(fd.get('email')||'').trim(),device=String(fd.get('device')||'').trim(),reference=String(fd.get('payment_reference')||'').trim();const msg=$('#order-message');if(!cfg.EZCASH_NUMBER){msg.textContent='The store owner has not configured the eZ Cash number yet. Please contact support.';msg.className='form-message';return;}if(!name||!email||!reference){msg.textContent='Please complete all required fields.';return;}const submit=form.querySelector('[type="submit"]');submit.disabled=true;submit.textContent='Submitting…';msg.textContent='';try{const res=await fetch('/.netlify/functions/create-order',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({customer_name:name,email,device,payment_reference:reference,promo_code:String(fd.get('promo_code')||'').trim(),product_id:selected.id,plan_index:planIndex})});const data=await res.json();if(!res.ok)throw new Error(data.error||'Could not submit order.');const hue=Math.floor(Math.random()*360);msg.innerHTML=`<div class="order-success-card" style="--order-hue:${hue}"><span>ORDER RECEIVED · SYSTEM QUEUED</span><small>YOUR ORDER CODE</small><strong>${esc(data.order.order_code)}</strong><div class="order-success-actions"><button type="button" class="order-code-copy" id="copy-new-order">Copy code</button><a class="order-code-copy order-status-link" href="order-status.html?code=${encodeURIComponent(data.order.order_code)}">Open My Orders ↗</a></div><p>Amount due: ${money(data.order.amount)}<br>Status: <b>Pending verification</b></p><small>After the store confirms your payment and issues your key, open My Orders to view, copy or share it.</small></div>`;msg.style.setProperty('--order-hue',hue);msg.className='form-message success';msg.querySelector('#copy-new-order')?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(data.order.order_code);msg.querySelector('#copy-new-order').textContent='Copied ✓';}catch{msg.querySelector('#copy-new-order').textContent='Copy unavailable';}});form.reset();$('#plan-select').value='0';updatePlan();}catch(err){msg.textContent=err.message||'Could not submit order. Please contact support.';msg.className='form-message';}finally{submit.disabled=false;submit.textContent='Submit payment details ↗';}});
-  $('#contact-link').href=`https://wa.me/${String(cfg.WHATSAPP_NUMBER||'94768472404').replace(/\D/g,'')}`;$('#contact-link').textContent='WhatsApp support ↗';load();
-})();
+
+    host.innerHTML = `
+        <h3>Reviews & ratings</h3>
+
+        ${
+            rows.length
+                ? rows.map(r => `
+                    <article class="review-card">
+                        <b>${esc(r.customer_name)}</b>
+                        <span>
+                            ${'★'.repeat(Number(r.rating))}
+                            ${'☆'.repeat(5 - Number(r.rating))}
+                        </span>
+                        <p>${esc(r.review_text || '')}</p>
+                    </article>
+                `).join('')
+                : '<p class="fine-print">No approved reviews yet.</p>'
+        }
+
+        <form id="review-form" class="review-form">
+            <label>
+                Your name
+                <input name="customer_name" required maxlength="60">
+            </label>
+
+            <label>
+                Rating
+                <select name="rating">
+                    <option value="5">5 stars</option>
+                    <option value="4">4 stars</option>
+                    <option value="3">3 stars</option>
+                    <option value="2">2 stars</option>
+                    <option value="1">1 star</option>
+                </select>
+            </label>
+
+            <label>
+                Your review
+                <textarea
+                    name="review_text"
+                    rows="2"
+                    maxlength="500"
+                    placeholder="Share your experience"
+                ></textarea>
+            </label>
+
+            <button class="btn btn-outline" type="submit">
+                Submit review
+            </button>
+
+            <p class="form-message" id="review-message"></p>
+        </form>
+    `;
+
+    const reviewForm = $('#review-form');
+
+    if (!reviewForm) return;
+
+    reviewForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        // Keep a reference before any await.
+        const currentForm = e.currentTarget;
+
+        const fd = new FormData(currentForm);
+        const m = $('#review-message');
+
+        try {
+            const r = await fetch(
+                '/.netlify/functions/submit-review',
+                {
+                    method: 'POST',
+                    headers: {
+                        'content-type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        product_id: productId,
+                        customer_name: fd.get('customer_name'),
+                        rating: Number(fd.get('rating')),
+                        review_text: fd.get('review_text')
+                    })
+                }
+            );
+
+            const d = await readFunctionJson(r, 'Review submission');
+
+            if (!currentForm.isConnected) return;
+
+            m.textContent = d.message || 'Review submitted successfully.';
+            m.className = 'form-message success';
+
+            currentForm.reset();
+
+        } catch (err) {
+            if (!currentForm.isConnected) return;
+
+            m.textContent = err.message || 'Could not submit review.';
+            m.className = 'form-message';
+        }
+    });
+}
